@@ -104,12 +104,12 @@ process_panel <- function(npq_file, panel_name) {
   } else stop("Unknown ID_METHOD: ", ID_METHOD)
 
 # filter
-  # toupper() on both sides: PPMI CSF says "CSF"/"passed", NTUH says
-  # "PLASMA"/"Passed", PPMI plasma says "plasma"/"PASS".
-  npq_samples <- npq_long %>%
-    filter(toupper(SampleType) == "SAMPLE",
-           toupper(Biofluid) == toupper(MATRIX_TYPE),
-           !is.na(DONOR_ID), DONOR_ID != "NA")
+# toupper() on both sides: PPMI CSF says "CSF"/"passed", NTUH says
+# "PLASMA"/"Passed", PPMI plasma says "plasma"/"PASS".
+npq_samples <- npq_long %>%
+  filter(toupper(SampleType) == "SAMPLE",
+     toupper(Biofluid) == toupper(MATRIX_TYPE),
+        !is.na(DONOR_ID), DONOR_ID != "NA")
 
   if (!is.null(VISIT_KEEP)) {
     npq_samples <- npq_samples %>% filter(CLINICAL_EVENT %in% VISIT_KEEP)
@@ -127,22 +127,21 @@ process_panel <- function(npq_file, panel_name) {
   cat("After filtering to study samples:",
       length(unique(npq_samples$SampleName)), "samples\n")
 
-  # v2: report the SampleQC split, then only drop if the config says to.
+  # report the SampleQC split, then only drop if the config says to
   qc_split <- npq_samples %>% distinct(SampleName, SampleQC) %>% dplyr::count(SampleQC)
   cat("SampleQC:", paste(qc_split$SampleQC, qc_split$n, collapse = ", "), "\n")
 
   if (DROP_SAMPLE_QC_WARN) {
     npq_samples <- npq_samples %>% filter(tolower(SampleQC) == "passed")
-    cat("  DROP_SAMPLE_QC_WARN = TRUE, so warned samples were removed (v1 behaviour):",
+    cat("  DROP_SAMPLE_QC_WARN = TRUE, so warned samples were removed:",
         length(unique(npq_samples$SampleName)), "samples remain\n")
   } else {
-    cat("  DROP_SAMPLE_QC_WARN = FALSE, so warned samples are KEPT and flagged\n")
+    cat("  DROP_SAMPLE_QC_WARN = FALSE, so warned samples are kept and flagged\n")
   }
 
 
-  # Donors with more than one sample. These are a mix of follow-up visits
-  # (PD47 0W / PD47 52W) and the same donor enrolled under two sub-study IDs
-  # (GMPD094 / UM-LRRK2-177). Do not yet know what the visit labels mean,
+  # Donors with more than one sample. 
+  # Do not yet know what the visit labels mean,
   # so drop the donor for now and record the list.
   repeat_donors <- npq_samples %>%
     distinct(SampleName, DONOR_ID) %>%
@@ -176,7 +175,7 @@ process_panel <- function(npq_file, panel_name) {
 
   # --- LOD diagnostic: % of samples below the plate LOD, per target ----------
   # Alamar does not report LOD or detectability for high-abundance targets
-  # (special normalization algorithm), so LOD is NA and "below LOD" is undefined.
+  # so their LOD is NA and "below LOD" is undefined
   lod_report <- npq_samples %>%
     mutate(high_abundance = Target %in% ha_targets,
            rare_case      = Target %in% rare_targets) %>%

@@ -16,8 +16,8 @@ PROJECT_DIR  <- file.path(BUCKET_DIR, "results", "nulisa_v2")
 
 # --- Cohort to analyze --------------------------------------------------------
 # change cohort and plate correction, source 00, then run scripts. 
-COHORT <- "p_ppmi"  
-PLATE_CORRECTION <- "covariate" # none, covariate, sva
+COHORT <- "p118"  
+PLATE_CORRECTION <- "none" # none, covariate, sva
 
 # "default" = the NA/zero thresholds below; "none" = no NA or zero filtering.
 FILTER_MODE <- "none"
@@ -29,7 +29,7 @@ PLATE_SUFFIX <- switch(PLATE_CORRECTION, none = "_plate_none", covariate = "_pla
 NPQ_SKIP <- 0
 
 # --- Meta-analysis cohorts ---------------------------------------------------
-META_COHORTS <- c("ELPD", "UMKLM", "KUL", "NTUH", "TRAPCAF", "CANDAS-SMPD")
+META_COHORTS <- c("ELPD", "UMKLM_KUL", "NTUH", "TRAPCAF", "CANDAS-SMPD")
 META_INPUT   <- "plate_adj" # plate_adj = some adjusted cohorts; plate_none = no plate adj any cohort
 
 

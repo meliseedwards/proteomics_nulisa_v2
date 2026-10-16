@@ -284,6 +284,14 @@ run_differential_abundance <- function(se_path, panel_name) {
       hemolysis_sensitive = Target %in% names(VENDOR_HEMOLYSIS_SENSITIVE[[panel_name]])
     )
 
+  # Report if a target measured above LOD in fewer than REPORT_MIN_DETECT of
+  # samples is still modelled and written, but flagged not reportable. The nine
+  # high-abundance targets have no LOD (special normalisation) and are reportable.
+  results <- results %>%
+    mutate(reportable = category == "high_abundance" |
+                        (!is.na(detectability) & detectability >= REPORT_MIN_DETECT))
+  cat("Targets below the", REPORT_MIN_DETECT * 100, "% reporting gate:", sum(!results$reportable), "\n")
+
    # annotate with script 02b inter- and intra-plate CV 
   sc_cv <- read.csv(SC_DRIFT_FILE) %>%
   select(Target, sc_inter_cv = inter_cv, sc_max_drift = max_abs_drift)
@@ -292,7 +300,7 @@ run_differential_abundance <- function(se_path, panel_name) {
 
   cat("Targets with no SC CV (below LOD in pooled plasma):",
       sum(is.na(results$sc_inter_cv)), "\n")
-  cat("Significant hits over Alamar's 15% SC CV threshold:",
+  cat("Significant hits over Alamar's 15% SC CV threshold:", 
       sum(results$adj.P.Val < FDR_THRESHOLD & results$sc_inter_cv > 15, 
       na.rm = TRUE), "\n")
   
@@ -306,15 +314,13 @@ run_differential_abundance <- function(se_path, panel_name) {
   
   cat("\nSignificant at FDR <", FDR_THRESHOLD, ":",
       sum(results$adj.P.Val < FDR_THRESHOLD),
-      "| of those, low-detectability:",
-      sum(results$adj.P.Val < FDR_THRESHOLD & results$low_detect_flag, na.rm = TRUE),
+      "| of those, reportable (detectability >=", REPORT_MIN_DETECT, "):",
+      sum(results$adj.P.Val < FDR_THRESHOLD & results$reportable, na.rm = TRUE),
       "| robust to sensitivity re-fits:", sum(results$robust, na.rm = TRUE), "\n")
-  
+
   cat("\nTop 15:\n")
   print(results %>% select(Target, logFC, P.Value, adj.P.Val, direction,
-                 detectability, low_detect_flag, sc_inter_cv, vendor_high_cv,
-                 robust) %>% head(15))
-
+                 detectability, reportable, sc_inter_cv, vendor_high_cv, robust) %>% head(15))
 
   write.csv(results,
             file.path(RESULTS_03_DIR, paste0("DA_results_all_", panel_name, ".csv")),
@@ -416,6 +422,7 @@ build_summary <- function(results, panel_name) {
                                  results$sc_inter_cv > 15, na.rm = TRUE),
     n_sig_vendor_high_cv = sum(results$adj.P.Val < FDR_THRESHOLD &
                                  results$vendor_high_cv, na.rm = TRUE),
+    n_sig_reportable = sum(results$adj.P.Val < FDR_THRESHOLD & results$reportable, na.rm = TRUE),
     plate_correction = PLATE_CORRECTION
   )
 }

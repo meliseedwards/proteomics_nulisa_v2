@@ -106,6 +106,7 @@ qc_ctx <- da %>%
             any_zero_imbalance = any(zero_imbalance_flag, na.rm = TRUE),
             any_hemolysis      = any(hemolysis_sensitive, na.rm = TRUE),
             in_meta6           = any(in_meta6),
+            reportable_all     = all(reportable),
             .groups = "drop")
 
 meta <- meta %>% left_join(qc_ctx, by = "Target") %>% mutate(meta_input = META_INPUT)
@@ -125,11 +126,13 @@ cat("Median I2:", round(median(meta$I2, na.rm = TRUE), 1),
     "| targets with I2 > 50%:", sum(meta$I2 > 50, na.rm = TRUE), "\n")
 cat("Conventional-RE hits that keep their sign in every leave-one-out refit:",
     sum(meta$FDR_z < FDR_THRESHOLD & meta$loo_same_sign, na.rm = TRUE), "\n")
+cat("Conventional-RE hits reportable in every cohort (detectability >=", REPORT_MIN_DETECT, "):",
+    sum(meta$FDR_z < FDR_THRESHOLD & meta$reportable_all, na.rm = TRUE), "\n")
 
 cat("\nTop 20 (by conventional RE p):\n")
 print(meta %>%
         select(Target, k, logFC, ci_lb, ci_ub, P_KH, FDR_KH, P_z, FDR_z, P_FE, I2, pi_lb, pi_ub,
-               n_sig, n_up, n_down, loo_same_sign, loo_cohort, any_low_detect) %>%
+               n_sig, n_up, n_down, loo_same_sign, loo_cohort, reportable_all) %>%
         mutate(across(c(logFC, ci_lb, ci_ub, pi_lb, pi_ub), ~ round(.x, 2)), I2 = round(I2, 0)) %>%
         head(20), n = 20, width = Inf)
 
@@ -138,7 +141,7 @@ print(meta %>%
 # --- 5. Figures --------------------------------------------------------------
 
 # forest plots: per-cohort estimates + pooled diamond (KH CI)
-top <- meta %>% arrange(P_z) %>% head(12) %>% pull(Target)
+top <- meta %>% filter(reportable_all) %>% arrange(P_z) %>% head(12) %>% pull(Target)
 png(file.path(META_DIR, paste0("forest_top_hits_", META_INPUT, ".png")),
     width = 14, height = 10, units = "in", res = 200)
 par(mfrow = c(3, 4), mar = c(4, 4, 3, 1))
@@ -153,7 +156,7 @@ dev.off()
 p_vol <- ggplot(meta, aes(logFC, -log10(P_z), colour = direction)) +
   geom_point(alpha = 0.7, size = 2.2) +
   geom_point(data = filter(meta, I2 > 50), shape = 1, size = 4, colour = "grey30") +
-  ggrepel::geom_text_repel(data = filter(meta, FDR_z < FDR_THRESHOLD) %>% head(20),
+  ggrepel::geom_text_repel(data = filter(meta, FDR_z < FDR_THRESHOLD, reportable_all) %>% head(20),
                            aes(label = Target), colour = "black", size = 3, max.overlaps = 30) +
   scale_colour_manual(values = c("Up in PD" = "tomato", "Down in PD" = "steelblue",
                                  "Not significant" = "grey80")) +
@@ -165,7 +168,7 @@ ggsave(file.path(META_DIR, paste0("volcano_meta_", META_INPUT, ".png")), p_vol,
        width = 9, height = 7, dpi = 150)
 
 # per-cohort log2FC heatmap for the top 30 targets
-sig <- meta %>% arrange(P_z) %>% head(30) %>% pull(Target)
+sig <- meta %>% filter(reportable_all) %>% arrange(P_z) %>% head(30) %>% pull(Target)
 hm <- da %>% filter(Target %in% sig) %>%
   mutate(Target = factor(Target, levels = rev(sig)),
          sig_in_cohort = adj.P.Val < FDR_THRESHOLD)
