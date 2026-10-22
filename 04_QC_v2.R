@@ -1,12 +1,9 @@
-# =============================================================================
 # Script 04 v2: Quality Control Tables + Figures
 # Date: August 2026
 # Description: Post-DA quality control for Neuro220 panel. 
-# =============================================================================
 
 
-
-# --- 0. Setup ----------------------------------------------------------------
+# 0. Setup 
 
 library(SummarizedExperiment)
 library(tidyverse)
@@ -19,16 +16,13 @@ dir.create(RESULTS_04_DIR, showWarnings = FALSE, recursive = TRUE)
 
 
 
-# --- QC thresholds, from the NULISAseqR user guide Table 2.1 -----------------
-
-# move to config
-ICC_MAX        <- 10    # % of var from plate. >10% = batch effect
-INTRA_CV_MAX   <- 10    # % median intra-plate CV
-INTER_CV_MAX   <- 15    # % median inter-plate CV
-RUN_DETECT_MIN <- 90    # % of targets detectable on a plate
-BATCH_F_P      <- 0.01  # F-test p for the batch-effect target definition
-BATCH_TUKEY_P  <- 0.01  # Tukey-adjusted pairwise p, same definition
-PNG_DPI <- 300
+# QC thresholds from the NULISAseqR user guide Table 2.1 
+ICC_MAX        <- 10    
+INTRA_CV_MAX   <- 10    
+INTER_CV_MAX   <- 15    
+RUN_DETECT_MIN <- 90   
+BATCH_F_P      <- 0.01  
+BATCH_TUKEY_P  <- 0.01  
 
 # covariates screened against the PCs
 CANDIDATE_COVARIATES <- c("phenotype_clean", "PlateID", "age", "sex_clean",
@@ -42,10 +36,8 @@ save_png <- function(plot, name, panel, w = 10, h = 7) {
 }
 
 
-
-# --- 1. Cohort  -------------------------------------------------------------------
-
-# Kept identical to build_cohort() in Script 03.
+# 1. Cohort 
+# identical to build_cohort() in script 03.
 prepare_cohort <- function(se) {
   meta <- as.data.frame(colData(se))
   keep <- meta$phenotype_clean %in% c("PD", "Control")
@@ -85,15 +77,14 @@ prepare_cohort <- function(se) {
 }
 
 
-
-# --- 2. ICC + F-test + Tukey, per target -------------------------------------
+#  2. ICC + F-test + Tukey, per target
 # The NulisaSeqR user guide defines a batch-effect target as ALL three of these:
 #   run ICC > 10%, F-test unadjusted p < 0.01, Tukey-adjusted p < 0.01 for >=1 run
-# Note: ICC is computed on NPQ (log2). Unclear in user guide whether to unlog. 
+# Note: ICC is inflated when lack of plate randomization; exploratory here
 icc_one_protein <- function(npq_values, plate) {
   d <- data.frame(npq = npq_values, plate = factor(plate))
   
-  # Mixed model: plate as random effect -> variance components for ICC
+  # mixed model: plate as random effect -> variance components for ICC
   mm <- lmer(npq ~ 1 + (1 | plate), data = d,
              control = lmerControl(calc.derivs = FALSE))
   vc <- as.data.frame(VarCorr(mm))
@@ -113,7 +104,7 @@ icc_one_protein <- function(npq_values, plate) {
   data.frame(ICC = icc, plate_F_pvalue = f_p, tukey_min_p = tukey_min_p)
 }
 
-# Distribution shape, per target.
+# Distribution shape per target.
 skewness <- function(x) {
   x <- x[!is.na(x)]
   if (length(x) < 3) return(NA_real_)
@@ -122,20 +113,19 @@ skewness <- function(x) {
 
 
 
-# --- 3. CV from SC controls --------------------------------------------------
-# Computed in 02b_SC_drift.R: pooled replicates across plates, sd/mean on
+# 3. CV from SC controls 
+# Computed in 02b_SC_drift_v2.R: pooled replicates across plates, sd/mean on
 # unlogged values, below-LOD excluded. Equivalent to NULISAseqR::interCV with
 # useMean = FALSE, method = "count" (the settings Banner used in the TAP report.)
-if (!file.exists(SC_DRIFT_FILE)) #edit for ppmi csf, fine for plasma
-  stop("SC drift file not found - run 02b_SC_drift.R first:\n  ", SC_DRIFT_FILE)
+if (!file.exists(SC_DRIFT_FILE)) 
+  stop("SC drift file not found - run 02b_SC_drift_v2.R first:\n  ", SC_DRIFT_FILE)
 
 cv_tbl <- read.csv(SC_DRIFT_FILE) %>%
   select(Target, intra_cv = intra_cv_median, intra_cv_max, worst_plate, inter_cv)
 
 
-# --- 4. Variance in a PC explained by a covariate ---------------------------
-# R-squared from a linear model. With a factor covariate this is the one-way
-# ANOVA R-squared: proportion of that PC's variance the covariate accounts for
+# 4. Variance in a PC explained by a covariate 
+
 pc_r2 <- function(pc, covariate) {
   d <- data.frame(pc = pc, x = covariate)
   d <- d[complete.cases(d), ]
@@ -144,7 +134,7 @@ pc_r2 <- function(pc, covariate) {
 }
 
 
-# --- 5. Everything for one panel ---------------------------------------------
+# 5. Everything for one panel
 
 run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
 
@@ -165,7 +155,8 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
 
 
 
-  # --- 5a. ICC ----------------------------------------------------------------
+  #  5a. ICC 
+
   cat("Computing ICC and Tukey tests...\n")
   icc_raw <- map_dfr(rownames(expr), function(tg) {
     res <- tryCatch(icc_one_protein(expr[tg, ], plate),
@@ -176,7 +167,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
     res
   })
 
-  # --- 5b. distribution shape + detectability from rowData -----------------
+  #  5b. skewness per target 
   shape <- data.frame(
     Target    = rownames(expr),
     skewness  = round(apply(expr, 1, skewness), 3)
@@ -184,13 +175,21 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
 
 
 
-  # --- 5c. CV ---------------------------------------------------------------
-
-  # Read the workbook once - both the CV block and the per-plate block use it.
+  #  5c. Read the NPQ workbook
    npq_long <- bind_rows(lapply(file.path(NPQ_DIR, npq_file), function(f) {
     read_excel(f, sheet = 1, skip = NPQ_SKIP, na = "NA") %>%
       mutate(across(any_of(c("NPQ", "targetLOD_NPQ")), as.numeric))
   }))
+
+   # Fix jumbled Aβ target names
+  fix_mojibake <- function(v) {
+    y <- iconv(v, from = "UTF-8", to = "latin1")
+    ok <- !is.na(y)
+    v[ok] <- y[ok]
+    Encoding(v) <- "UTF-8"
+    v
+  }
+  npq_long$Target <- fix_mojibake(npq_long$Target)
 
   # same aliases as Script 01
   if ("SampleMatrixType" %in% names(npq_long))
@@ -201,16 +200,13 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
   npq_long <- npq_long %>% mutate(NPQ = as.numeric(NPQ), LOD = as.numeric(LOD))
 
 
-
-  # --- 5d. DA results -------------------------------------------------------
+  # 5d. DA results 
   da <- read.csv(da_file, stringsAsFactors = FALSE) %>%
     select(Target, logFC, P.Value, adj.P.Val, direction, in_meta6,
            any_of(c("P_noQCwarn", "P_noOutlier", "robust")))
 
 
-
-  # --- 5e. qc_target.csv ----------------------------------------------------
-  # rowData carries detectability / zero_prop / category from Script 01.
+  # 5e. qc_target.csv 
   qc_target <- as.data.frame(rowData(se)) %>%
     select(Target, category, detectability, zero_prop, na_prop, low_detect_flag) %>%
     left_join(icc_raw,   by = "Target") %>%
@@ -218,7 +214,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
     left_join(cv_tbl,    by = "Target") %>%
     left_join(da,        by = "Target") %>%
     mutate(
-      # --- individual flags. Each is one criterion, checkable on its own. ---
+      #  individual flags. Each is one criterion, checkable on its own. 
       sig            = !is.na(adj.P.Val) & adj.P.Val < FDR_THRESHOLD,
       low_batch_icc  = !is.na(ICC) & ICC < ICC_MAX,
       good_intra_cv  = !is.na(intra_cv) & intra_cv < INTRA_CV_MAX,
@@ -230,7 +226,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
       batch_effect_target = !is.na(ICC) & ICC > ICC_MAX &
                             !is.na(plate_F_pvalue) & plate_F_pvalue < BATCH_F_P &
                             !is.na(tukey_min_p) & tukey_min_p < BATCH_TUKEY_P,
-      # --- composite. TRUE only if every criterion above is met. ------------
+      #  composite. TRUE only if every criterion above is met. 
       high_confidence = sig & low_batch_icc & good_intra_cv & good_inter_cv &
                         well_detected) %>%
     arrange(desc(sig), P.Value)
@@ -257,9 +253,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
 
 
 
-
-  # --- 5f. qc_target_by_plate.csv ------------------------------------------
-  # how each target behaves on each plate
+  # 5f. qc_target_by_plate.csv 
   target_by_plate <- npq_long %>%
     filter(SampleName %in% colnames(expr), Target %in% rownames(expr)) %>%
     select(SampleName, Target, PlateID, NPQ, LOD) %>%
@@ -277,9 +271,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
             paste0("qc_target_by_plate_", panel_name, ".csv")), row.names = FALSE)
 
 
-
-
-  # --- 5g. PCA -------------------------------------------------------------
+  #  5g. PCA 
   pca <- prcomp(t(expr), scale. = TRUE, center = TRUE)
   var_exp <- (pca$sdev^2 / sum(pca$sdev^2)) * 100
   n_pc <- min(10, ncol(pca$x))
@@ -288,7 +280,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
   pc_meta <- left_join(pc_df, meta, by = "SampleName")
 
 
-  # --- 5h. qc_sample.csv ---------------------------------------------------
+  #  5h. qc_sample.csv 
   qc_sample <- meta %>%
     select(SampleName, DONOR_ID, PlateID, SampleQC, sample_qc_flag,
            pct_above_lod, detectability_flag, phenotype_clean,
@@ -298,7 +290,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
             paste0("qc_sample_", panel_name, ".csv")), row.names = FALSE)
 
 
-  # --- 5i. qc_plate.csv ----------------------------------------------------
+  #  5i. qc_plate.csv 
   # Includes the PD/Control counts: if phenotype is unbalanced across plates,
   # the plate ANOVA in qc_pc_variance is confounded and cannot be read as batch.
   run_detect <- target_by_plate %>%
@@ -319,7 +311,7 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
     left_join(run_detect, by = "PlateID") %>%
     mutate(run_detect_pass = run_detectability >= RUN_DETECT_MIN)
 
-  # is phenotype balanced across plates?
+  # is phenotype balanced across plates
   bal_tab  <- table(meta$PlateID, meta$phenotype_clean)
   bal_test <- suppressWarnings(chisq.test(bal_tab))
   cat("Phenotype x plate balance: chi-sq p =", signif(bal_test$p.value, 3),
@@ -332,17 +324,13 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
       "%, plates below the guide's ", RUN_DETECT_MIN, "%: ",
       sum(!qc_plate$run_detect_pass), " of ", nrow(qc_plate), "\n", sep = "")
   if (sum(!qc_plate$run_detect_pass) > nrow(qc_plate) / 2)
-    cat("  NOTE: v2 deliberately keeps low-detectability targets that v1 dropped,\n",
-        "  so this metric is systematically lower here than in a v1-style run. It\n",
-        "  reflects the panel's fit to analyte, not a plate-processing failure.\n")
+    cat("Note: kept low-detectability targets lower this metric, not a plate failure\n")
   write.csv(qc_plate, file.path(RESULTS_04_DIR,
             paste0("qc_plate_", panel_name, ".csv")), row.names = FALSE)
 
 
-  # --- 5j. covariate screen -------------------------------------------------
-  # R-squared of each candidate covariate against each PC. A covariate that
-  # explains a lot of PC variance and is NOT in DA_COVARIATES is a candidate
-  # for the model.
+  #  5j. covariate screen 
+  # R-squared of each candidate covariate against each PC
   covars <- intersect(CANDIDATE_COVARIATES, colnames(pc_meta))
   cov_r2 <- expand.grid(covariate = covars, PC = paste0("PC", 1:n_pc),
                         stringsAsFactors = FALSE) %>%
@@ -372,14 +360,11 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
   }
 
 
-
-# --- 5k. Zero report --------------------------------------------------------
-
-# Write out table of targets with exact zeros, and how many are in PD vs Control
-ex  <- assay(se, "npq")
-qc <- qc_target
-pd  <- meta$phenotype_clean == "PD"
-ct  <- meta$phenotype_clean == "Control"
+  #  5k. Zero report 
+  ex  <- assay(se, "npq")
+  qc <- qc_target
+  pd  <- meta$phenotype_clean == "PD"
+  ct  <- meta$phenotype_clean == "Control"
 
 zero_report <- lapply(rownames(ex), function(t) {
   y <- ex[t, ]
@@ -427,7 +412,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
   theme_set(theme_bw(base_size = 11))
 
-  # 01. target x plate heatmap ----------------------------------------------
+  # 01. target x plate heatmap 
   hm_df <- target_by_plate %>%
     left_join(qc_target %>% select(Target, ICC), by = "Target") %>%
     mutate(Target = reorder(Target, ICC))
@@ -459,8 +444,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-  # 02 / 03. Q-Q plots -------------------------------------------------------
-
+  # 02 / 03. Q-Q plots 
   # Observed NPQ against normal theoretical quantiles, coloured by plate, with
   # a reference line through the quartiles.
   make_qq <- function(targets, title, subtitle, fname) {
@@ -496,8 +480,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-  # 04. PCA, 3 panels --------------------------------------------------------
-
+  # 04. PCA, 3 panels 
    pc_long <- pc_meta %>%
     select(PC1, PC2, Plate = PlateID, Phenotype = phenotype_clean,
            Sex = sex_clean) %>%
@@ -514,8 +497,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-  # 05. sample boxplots by plate --------------------------------------------
-
+  # 05. sample boxplots by plate
   p05 <- ggplot(long, aes(SampleName, NPQ, fill = PlateID)) +
     geom_boxplot(outlier.size = 0.2, linewidth = 0.2) +
     facet_grid(~ PlateID, scales = "free_x", space = "free_x") +
@@ -530,7 +512,8 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-# 06. sample detectability by plate ---------------------------------------
+# 06. sample detectability by plate 
+
   p06 <- ggplot(meta, aes(PlateID, pct_above_lod)) +
     geom_boxplot(outlier.size = 0.4, fill = "grey90") +
     geom_hline(yintercept = SAMPLE_DET_MIN * 100, linetype = "dashed",
@@ -544,7 +527,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-  # 07. ICC distribution -----------------------------------------------------
+  # 07. ICC distribution 
   # Show significant targets ordered by ICC.
   icc_lab <- qc_target %>% filter(sig) %>% arrange(desc(ICC)) %>% head(20)
   fig_title <- paste0(panel_name, ": DA hits ordered by plate ICC")
@@ -575,8 +558,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-  # 08. CV vs detectability --------------------------------------------------
-
+  # 08. CV vs detectability 
   cv_long <- qc_target %>%
     select(Target, detectability, intra_cv, inter_cv, sig) %>%
     pivot_longer(c(intra_cv, inter_cv), names_to = "cv_type", values_to = "cv")
@@ -591,8 +573,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
   save_png(p08, "08_cv_vs_detectability", panel_name, 10, 5)
 
 
-  # 09. covariate x PC heatmap -----------------------------------------------
-
+  # 09. covariate x PC heatmap 
   p09 <- ggplot(cov_r2, aes(factor(PC, levels = paste0("PC", 1:n_pc)),
                             reorder(covariate, r2, function(z) max(z, na.rm = TRUE)),
                             fill = r2)) +
@@ -606,10 +587,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
   save_png(p09, "09_covariate_pc_r2", panel_name, 10, 6)
 
 
-
-  # 10. sample correlation heatmap ------------------------------------------
-
-  # Subsampled: a full 800x800 tile plot is unreadable and slow.
+  # 10. sample correlation heatmap 
   set.seed(1)
   sub_n  <- min(150, ncol(expr))
   sub_id <- sample(colnames(expr), sub_n)
@@ -630,7 +608,8 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
     theme(axis.text = element_blank(), axis.ticks = element_blank())
   save_png(p11, "10_sample_correlation", panel_name, 8, 7)
 
-  # 11. violins for significant targets passing all QC criteria ---------------
+
+  # 11. violins for significant targets passing all QC criteria 
   hc <- qc_target %>% filter(sig, high_confidence) %>% arrange(adj.P.Val) %>% head(12)
   if (nrow(hc) > 0) {
     vd <- as.data.frame(expr[hc$Target, , drop = FALSE]) %>%
@@ -665,9 +644,7 @@ print(head(zero_report %>% filter(pct_zero > 0) %>%
 
 
 
-# --- 6. Run all panels -------------------------------------------------------
-
-
+# 6. Run all panels 
 SE_PATHS  <- list(Neuro220 = SE_MERGED)
 NPQ_FILES <- list(Neuro220 = NPQ_FILE)
 
@@ -680,7 +657,7 @@ for (p in PANELS) {
     da_file    = file.path(RESULTS_03_DIR, paste0("DA_results_all_", p, ".csv")))
 }
 
-# --- 7. Summary --------------------------------------------------------------
+# 7. Summary 
 qc_summary <- bind_rows(lapply(PANELS, function(p) data.frame(
   panel             = p,
   n_targets         = nrow(qc[[p]]),

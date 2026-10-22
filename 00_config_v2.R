@@ -1,8 +1,8 @@
-# =============================================================================
+
 # Config for NULISA proteomics pipeline (v2)
-# Date: July 2026
+# Date: October 2026
 # Description: Paths & parameters for NULISA GP2 Pilot proteomics workflow
-# =============================================================================
+
 
 
 
@@ -10,14 +10,14 @@
 BUCKET_DIR   <- "~/proteomics_bucket/proteomics"
 DATA_DIR     <- file.path(BUCKET_DIR, "metadata")
 MANIFEST_DIR <- file.path(DATA_DIR, "GP2_nulisa_manifests")
-PROJECT_DIR  <- file.path(BUCKET_DIR, "results", "nulisa_v2")
+PROJECT_DIR <- "/mnt/output/proteomics/results/nulisa_v2"
 
 
 
 # --- Cohort to analyze --------------------------------------------------------
 # change cohort and plate correction, source 00, then run scripts. 
-COHORT <- "p118"  
-PLATE_CORRECTION <- "none" # none, covariate, sva
+COHORT <- "p_ppmi_v10"  
+PLATE_CORRECTION <- "covariate" # none, covariate, sva
 
 # "default" = the NA/zero thresholds below; "none" = no NA or zero filtering.
 FILTER_MODE <- "none"
@@ -31,7 +31,7 @@ NPQ_SKIP <- 0
 # --- Meta-analysis cohorts ---------------------------------------------------
 META_COHORTS <- c("ELPD", "UMKLM_KUL", "NTUH", "TRAPCAF", "CANDAS-SMPD")
 META_INPUT   <- "plate_adj" # plate_adj = some adjusted cohorts; plate_none = no plate adj any cohort
-
+LOGFC_THRESHOLD <- 0.20   # 0.14 = 10%, 0.20 = 15%
 
 if (COHORT == "p121") {         # NTUH 
 
@@ -39,12 +39,12 @@ if (COHORT == "p121") {         # NTUH
   MATRIX_TYPE        <- "PLASMA"
   SAMPLE_DET_MIN     <- 0.90            
   ANCESTRY_KEEP      <- NULL
-  VISIT_KEEP         <- NULL            # no visit column
+  VISIT_KEEP         <- NULL            # no visit column = null
   ID_METHOD          <- "strip_suffix"  # SampleName minus "_s2" = GP2ID
   ID_COLUMN          <- NULL
   GP2_JOIN_KEY       <- "GP2ID"
   STUDY_FILTER       <- c("NTUH")
-  EXCLUDE_FROM_DA <- c("APOE4")   # from TAP report: apoe binary carrier readout 
+  EXCLUDE_FROM_DA <- c("APOE4")   
   USE_CURATED        <- FALSE
   SAMPLE_ID_PATTERN  <- "^NTUH_[0-9]+_s[0-9]+$"
   MANIFEST_FILES     <- NULL
@@ -70,44 +70,6 @@ if (COHORT == "p121") {         # NTUH
   NPQ_FILE           <- "P118_BSHRI_NULISAseq_Neuro220_NPQ_06082026.xlsx"
   MANIFEST_FILES     <- c("UMKLM_selfQCV2_2026-01-23_m11.csv",
                           "KUL_selfQCV2_2026-01-23_m4.csv")
-  MANIFEST_SAMPLE_COL <- "sample_id"
-  MANIFEST_GP2ID_COL  <- "GP2ID"
-
-} else if (COHORT == "p118a") {         # UMKLM
-  PANELS             <- c("Neuro220")
-  MATRIX_TYPE        <- "PLASMA"
-  SAMPLE_DET_MIN     <- 0.90
-  ANCESTRY_KEEP      <- NULL
-  VISIT_KEEP         <- NULL
-  ID_METHOD          <- "manifest"
-  ID_COLUMN          <- NULL
-  GP2_JOIN_KEY       <- "GP2ID"
-  STUDY_FILTER       <- "UMKLM"
-  EXCLUDE_FROM_DA    <- c("APOE4")
-  USE_CURATED        <- FALSE
-  SAMPLE_ID_PATTERN  <- NULL
-  NPQ_DIR            <- file.path(BUCKET_DIR, "P118 GP2")
-  NPQ_FILE           <- "P118_BSHRI_NULISAseq_Neuro220_NPQ_06082026.xlsx"
-  MANIFEST_FILES     <- "UMKLM_selfQCV2_2026-01-23_m11.csv"
-  MANIFEST_SAMPLE_COL <- "sample_id"
-  MANIFEST_GP2ID_COL  <- "GP2ID"
-
-} else if (COHORT == "p118b") {         # KUL
-  PANELS             <- c("Neuro220")
-  MATRIX_TYPE        <- "PLASMA"
-  SAMPLE_DET_MIN     <- 0.90
-  ANCESTRY_KEEP      <- NULL
-  VISIT_KEEP         <- NULL
-  ID_METHOD          <- "manifest"
-  ID_COLUMN          <- NULL
-  GP2_JOIN_KEY       <- "GP2ID"
-  STUDY_FILTER       <- "KUL"
-  EXCLUDE_FROM_DA    <- c("APOE4")
-  USE_CURATED        <- FALSE
-  SAMPLE_ID_PATTERN  <- NULL
-  NPQ_DIR            <- file.path(BUCKET_DIR, "P118 GP2")
-  NPQ_FILE           <- "P118_BSHRI_NULISAseq_Neuro220_NPQ_06082026.xlsx"
-  MANIFEST_FILES <- "KUL_selfQCV2_2026-01-23_m4.csv"
   MANIFEST_SAMPLE_COL <- "sample_id"
   MANIFEST_GP2ID_COL  <- "GP2ID"
 
@@ -208,7 +170,7 @@ if (COHORT == "p121") {         # NTUH
   MANIFEST_SAMPLE_COL <- "GP2sampleID"
   MANIFEST_GP2ID_COL  <- "GP2ID"
 
-} else if (COHORT == "p144") {           # LARGEPD (all controls) for within-cohort carrier analyses 
+} else if (COHORT == "p144") {           # LARGEPD (all controls)  
   PANELS             <- c("Neuro220")
   MATRIX_TYPE        <- "PLASMA"
   SAMPLE_DET_MIN     <- 0.90
@@ -227,7 +189,7 @@ if (COHORT == "p121") {         # NTUH
   MANIFEST_SAMPLE_COL <- "sample_id"
   MANIFEST_GP2ID_COL  <- "GP2ID"
 
-} else if (COHORT == "p146") {           # PDGNRTN (all cases) for within-cohort carrier analyses
+} else if (COHORT == "p146") {           # PDGNRTN (all cases) 
   PANELS             <- c("Neuro220")
   MATRIX_TYPE        <- "PLASMA"
   SAMPLE_DET_MIN     <- 0.90
@@ -285,6 +247,25 @@ if (COHORT == "p121") {         # NTUH
   NPQ_DIR  <- file.path(BUCKET_DIR, "PPMI", "extracted")
   NPQ_FILE <- "PPMI_Project_312_NULISAseq_Neuro_Panel_1-NPQ_Counts_Plasma_Cohort.xlsx"
   NPQ_SKIP <- 1                            # header note above the column row
+} else if (COHORT == "p_ppmi_v10") {       # v10 = follow up time point
+  PANELS             <- c("Neuro220")
+  MATRIX_TYPE        <- "PLASMA"
+  SAMPLE_DET_MIN     <- 0.90
+  ANCESTRY_KEEP      <- NULL
+  VISIT_KEEP <- "V10"
+  ID_METHOD          <- "column"
+  ID_COLUMN          <- "PatNo"
+  GP2_JOIN_KEY       <- "clinical_id"     
+  STUDY_FILTER       <- c("PPMI-G", "PPMI-N")
+  EXCLUDE_FROM_DA    <- c("APOE4", "mCherry") 
+  USE_CURATED        <- FALSE
+  SAMPLE_ID_PATTERN  <- NULL
+  MANIFEST_FILES     <- NULL
+  MANIFEST_SAMPLE_COL <- NULL
+  MANIFEST_GP2ID_COL  <- NULL
+  NPQ_DIR  <- file.path(BUCKET_DIR, "PPMI", "extracted")
+  NPQ_FILE <- "PPMI_Project_312_NULISAseq_Neuro_Panel_1-NPQ_Counts_Plasma_Cohort.xlsx"
+  NPQ_SKIP <- 1                           
 } else {
   stop("Unknown COHORT: ", COHORT)
 }
@@ -293,8 +274,6 @@ if (COHORT == "p121") {         # NTUH
 COHORT_DIR <- switch(COHORT,
   p111  = "results_p111_v2",
   p118  = "results_p118_v2",
-  p118a = "results_p118a_v2",
-  p118b = "results_p118b_v2",
   p121  = "results_p121_v2",
   p136  = "results_p136_v2",
   p143  = "results_p143_v2",
@@ -304,6 +283,7 @@ COHORT_DIR <- switch(COHORT,
   p146  = "results_p146_v2",
   p144_p146 = "results_p144_p146_v2",
   p_ppmi = "results_p_ppmi_v2",
+  p_ppmi_v10 = "results_p_ppmi_v10_v2",
   stop("No COHORT_DIR defined for ", COHORT))
 
 RESULTS_BASE <- file.path(PROJECT_DIR, paste0(COHORT_DIR, "_filter_", FILTER_MODE))
@@ -361,8 +341,8 @@ APPLY_DET_FILTER <- FALSE
 # Note Alamar's floor is stricter and matrix-dependent (90% plasma, 70% CSF)
 SAMPLE_DETECT_EXCLUDE <- 20
 
-# Minimum non-missing samples before a target is modelled. PLACEHOLDER.
-MIN_SAMPLES_PER_TARGET <- 20
+# Minimum non-missing samples before a target is modelled. 
+MIN_SAMPLES_PER_TARGET <- 20 # none in our data, placeholder
 
 # Track target-detectability and flag those under 50%
 REPORT_MIN_DETECT <- 0.50
@@ -373,8 +353,8 @@ DROP_SAMPLE_QC_WARN <- FALSE
 REMOVE_OUTLIERS <- FALSE
 
 # Some donors contributed more than one sample. Until we know what the visit
-# labels mean (0W / 52W) and how to handle donors enrolled under multiple
-# sub-study IDs, these donors are excluded rather than picked between.
+# labels mean (0W / 52W / unlabelled) and how to handle donors enrolled under 
+# multiple sub-study IDs, these donors are excluded rather than picked between.
 DROP_REPEAT_DONORS <- TRUE
 
 # Samples where the proteomic APOE4 readout disagrees with the donor's APOE
@@ -389,6 +369,8 @@ IDENTITY_EXCLUDE <- if (file.exists(IDENTITY_EXCLUDE_FILE)) {
 # --- v2 DA model ------------------------------------------------------------
 # Covariates: age and sex only, per Guglielmo. PDTRTMNT is deliberately absent.
 DA_COVARIATES <- c("age", "sex_clean")
+EXCLUDE_DIAGNOSES <- c("Prodromal", "Prodromal motor PD", "Prodromal non-motor PD",
+                       "Unaffected with hyposmia")
 
 
 

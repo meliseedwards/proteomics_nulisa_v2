@@ -1,14 +1,12 @@
-# =============================================================================
 # Script 02b: Sample control (SC) drift across plates, per target
 # Date: August 2026
 # Description: SC wells are pooled plasma that aren't used in normalization,
 #              so plate-to-plate differences in them are technical, not
 #              biological. Reports per-plate medians, drift from the
 #              across-plate median, and intra/inter-plate CV per target.
-# =============================================================================
 
 
-# --- 0. Setup ----------------------------------------------------------------
+# 0. Setup 
 
 library(SummarizedExperiment)
 library(tidyverse)
@@ -19,13 +17,23 @@ source("~/proteomics_nulisa/scripts/nulisa_pipeline_v2/quick_pass/00_config_v2.R
 dir.create(SC_DRIFT_DIR, showWarnings = FALSE, recursive = TRUE)
 
 
-# --- 1. Load SC wells --------------------------------------------------------
+# 1. Load SC wells
 
 npq <- bind_rows(lapply(file.path(NPQ_DIR, NPQ_FILE), function(f) {
   read_excel(f, sheet = 1, skip = NPQ_SKIP, na = "NA") %>%
     mutate(across(any_of(c("NPQ", "targetLOD_NPQ", "LOD")), as.numeric))
 })) %>%
   dplyr::rename(any_of(c(LOD = "targetLOD_NPQ")))
+
+# Fix affected Aβ target names
+fix_mojibake <- function(v) {
+  y <- iconv(v, from = "UTF-8", to = "latin1")
+  ok <- !is.na(y)
+  v[ok] <- y[ok]
+  Encoding(v) <- "UTF-8"
+  v
+}
+npq$Target <- fix_mojibake(npq$Target)
 
 sc <- npq %>%
   dplyr::filter(SampleType == "SC") %>%
@@ -43,7 +51,7 @@ cat("SC wells:", dplyr::n_distinct(sc$SampleName),
 ok <- sc %>% dplyr::filter(is.na(LOD) | NPQ > LOD)
 
 
-# --- 2. Per-plate median and intra-plate CV --------------------------------
+# 2. Per-plate median and intra-plate CV
 
 # For each target on each plate, take the median of the 3 SC replicates
 # then measure how far each plate sits from the median across all plates.
@@ -67,7 +75,7 @@ intra_summary <- per_plate %>%
             .groups = "drop")
 
 
-# --- 3. Inter-plate CV across all SC wells -----------------------------------
+# 3. Inter-plate CV across all SC wells 
 
 inter <- ok %>%
   group_by(Target) %>%
@@ -82,7 +90,7 @@ drift_max <- per_plate %>%
   summarise(max_abs_drift = max(abs(delta_npq)), .groups = "drop")
 
 
-# --- 4. Assemble -------------------------------------------------------------
+# 4. Assemble 
 
 sc_drift <- per_plate %>%
   pivot_wider(names_from  = plate,
@@ -94,7 +102,7 @@ sc_drift <- per_plate %>%
   arrange(desc(max_abs_drift))
 
 
-# --- 5. Report in terminal -----------------------------------------------------
+# 5. Report in terminal 
 
 cat("\nMedian intra-plate SC CV by plate (Alamar target: <10%):\n")
 print(per_plate %>%
@@ -120,7 +128,7 @@ cat("Targets with at least one plate over Alamar's 10% intra-plate CV:",
     sum(sc_drift$intra_cv_max > 10, na.rm = TRUE), "\n")
 
 
-# --- 6. Save -----------------------------------------------------------------
+#  6. Save 
 
 # Long format is easier to join onto DA results; wide is easier to eyeball.
 write.csv(per_plate,
@@ -134,7 +142,7 @@ write.csv(sc_drift,
 cat("\nWrote sc_drift_", COHORT, ".csv and sc_drift_long_", COHORT, ".csv\n", sep = "")
 
 
-# --- 7. Plate labels ---------------------------------------------------------
+#  7. Plate labels 
 
 # p1/p2/p3 are display labels built here from sorted PlateID. Print the
 # mapping so the columns can be traced back.

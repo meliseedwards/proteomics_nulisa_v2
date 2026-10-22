@@ -1,13 +1,10 @@
-# =============================================================================
 # Script 01 (v2): load, filter, & build SummarizedExperiment (SE) objects
-# Date: July 2026
-# Description: Loads NPQ data, filters to study samples if applicable, applies
-#              target filtering, builds SummarizedExperiment per panel.
-# =============================================================================
+# Date: October 2026
+# Description: Loads NPQ data, filters to study samples, builds SE. 
 
 
 
-# --- 0. Setup ----------------------------------------------------------------
+# 0. Setup
 # Note: SummarizedExperiment must be loaded before tidyverse
 library(SummarizedExperiment)
 library(tidyverse)
@@ -19,7 +16,7 @@ dir.create(RESULTS_01_DIR, showWarnings = FALSE, recursive = TRUE)
 
 
 
-# --- Fix encoded target names (Abeta) ----------------------------------------
+# Fix encoded target names (Abeta) 
 # the file contains "AI^2 38" instead of "Abeta38" (UTF-8). fix for plots.
 fix_mojibake <- function(v) {
   y <- iconv(v, from = "UTF-8", to = "latin1")
@@ -29,9 +26,8 @@ fix_mojibake <- function(v) {
   v
 }
 
-# --- 1. Helper to process one panel --------------------------------------------
+# 1. Process one panel
 process_panel <- function(npq_file, panel_name) {
-  cat("Processing panel:", panel_name, "\n")
   npq_path <- file.path(NPQ_DIR, npq_file)
 
   # Special-target categories for this panel 
@@ -41,7 +37,8 @@ process_panel <- function(npq_file, panel_name) {
   qc_exclude_targets <- c(ha_targets, rare_targets)
 
   # Load NPQ data
-  npq_long <- read_excel(npq_path, sheet = 1, skip = NPQ_SKIP, na = "NA")
+  npq_long <- bind_rows(lapply(npq_path, function(p)
+  read_excel(p, sheet = 1, skip = NPQ_SKIP, na = "NA", col_types = "text")))
   cat("Raw rows in the data:", nrow(npq_long), "\n")
 
   # Repair double-encoded target names (abeta)
@@ -61,7 +58,7 @@ process_panel <- function(npq_file, panel_name) {
     npq_long <- dplyr::rename(npq_long, CLINICAL_EVENT = ClinicalEvent)
 
 
-# --- Donor ID: matching IDs for different cohorts ---------------------
+# Donor ID: matching IDs for different cohorts
   # Three routes, set by ID_METHOD in the config:
   #   "column"        the file already names the participant (PPMI: PATNO)
   #   "strip_suffix"  SampleName minus the "_s2" aliquot suffix is the GP2ID
@@ -74,7 +71,6 @@ process_panel <- function(npq_file, panel_name) {
     npq_long$DONOR_ID <- sub("_s[0-9]+$", "", npq_long$SampleName)
 
   } else if (ID_METHOD == "manifest") {
-   # KUL's manifest is xlsx (sheet 2); the others are csv
     read_one <- function(f) {
       if (grepl("\\.xlsx$", f))
         readxl::read_excel(file.path(MANIFEST_DIR, f), sheet = 2,
@@ -132,17 +128,14 @@ npq_samples <- npq_long %>%
   cat("SampleQC:", paste(qc_split$SampleQC, qc_split$n, collapse = ", "), "\n")
 
   if (DROP_SAMPLE_QC_WARN) {
-    npq_samples <- npq_samples %>% filter(tolower(SampleQC) == "passed")
+    npq_samples <- npq_samples %>% filter(tolower(SampleQC) %in% c("passed", "pass"))
     cat("  DROP_SAMPLE_QC_WARN = TRUE, so warned samples were removed:",
         length(unique(npq_samples$SampleName)), "samples remain\n")
-  } else {
-    cat("  DROP_SAMPLE_QC_WARN = FALSE, so warned samples are kept and flagged\n")
   }
 
 
   # Donors with more than one sample. 
-  # Do not yet know what the visit labels mean,
-  # so drop the donor for now and record the list.
+  # do not know what the visit labels mean, so drop the donor for now and record the list.
   repeat_donors <- npq_samples %>%
     distinct(SampleName, DONOR_ID) %>%
     dplyr::count(DONOR_ID) %>%
@@ -173,7 +166,7 @@ npq_samples <- npq_long %>%
     mutate(NPQ = as.numeric(NPQ), LOD = as.numeric(LOD))
 
 
-  # --- LOD diagnostic: % of samples below the plate LOD, per target ----------
+  # LOD diagnostic: % of samples below the plate LOD, per target
   # Alamar does not report LOD or detectability for high-abundance targets
   # so their LOD is NA and "below LOD" is undefined
   lod_report <- npq_samples %>%
@@ -196,7 +189,7 @@ npq_samples <- npq_long %>%
   
   if (nrow(high_below) > 0) print(high_below, n = Inf)
 
-  # --- Sample-level detectability (FLAG, do not auto-drop) -------------------
+  # Sample-level detectability (FLAG, do not auto-drop) 
   # Per Alamar: sample detectability = % of targets above that sample's LOD.
   # Both high-abundance and rare-case targets are excluded from this metric.
   sample_det <- npq_samples %>%
@@ -239,8 +232,7 @@ npq_samples <- npq_long %>%
   cat("Wide matrix:", nrow(npq_wide), "targets x",
       ncol(npq_wide) - 1, "samples\n")
 
-  # Build sample metadata (one row per sample)
-  # v2: carries the SampleQC and detectability flags forward.
+  # Build sample metadata: one row per sample with QC and detectability flags
   sample_meta <- npq_samples %>%
     select(SampleName, PlateID, SampleQC, DONOR_ID, any_of("CLINICAL_EVENT"), 
     Biofluid) %>%
@@ -250,12 +242,11 @@ npq_samples <- npq_long %>%
     arrange(SampleName)
 
 
-
-  # --- Target inclusion decision ------------------------------------------------
+  # Target inclusion decision 
   # computed from this cohort:
-  #   na_prop       proportion of values that are NA (no value reported)
-  #   zero_prop     proportion of PRESENT values that are exactly 0 (zero reads)
-  #   detectability proportion of present values above that row's LOD
+  #   na_prop = proportion of values that are NA (no value reported)
+  #   zero_prop = proportion of PRESENT values that are exactly 0 (zero reads)
+  #   detectability = proportion of present values above that row's LOD
   target_stats <- npq_samples %>%
     group_by(Target) %>%
     summarise(
@@ -269,14 +260,14 @@ npq_samples <- npq_long %>%
                                sum(!is.na(NPQ) & !is.na(LOD)), NA_real_),
       .groups = "drop"
     )
-  # Optional: treat zeros as missing too (check with HL - see config).
+
   if (ZEROS_COUNT_AS_NA) {
     target_stats <- target_stats %>%
       mutate(na_prop = (n_values - n_present + n_zero) / n_values)
     cat("NOTE: ZEROS_COUNT_AS_NA = TRUE, so zeros count toward na_prop.\n")
   }
   
-  # Categorize every target present in the data into one auditable bucket.
+  # Give each target a category and a keep/drop status
   target_status <- target_stats %>%
     mutate(
       category = case_when(
@@ -335,9 +326,8 @@ npq_samples <- npq_long %>%
   return(se)
 }
 
-# --- 2. Helper: build a SummarizedExperiment from wide data ------------------
-# attaches the per-target QC table as rowData, so Script 03 can join
-# the flags onto the DA results without re-reading a CSV by filename.
+# 2. Build a SummarizedExperiment from wide data
+# target QC table is stored in rowData so 03 can use it
 build_se <- function(wide_df, sample_meta, target_status, target_subset = NULL) {
   df <- wide_df
   if (!is.null(target_subset)) {
@@ -356,7 +346,7 @@ build_se <- function(wide_df, sample_meta, target_status, target_subset = NULL) 
     colData = sample_meta_aligned,
     rowData = row_data
   )
-  # matrix columns must align with metadata, no silent match failures
+  # check samples and targets line up with their metadata
   stopifnot(
     identical(colnames(se), colData(se)$SampleName),
     identical(rownames(se), rowData(se)$Target),
@@ -365,8 +355,7 @@ build_se <- function(wide_df, sample_meta, target_status, target_subset = NULL) 
   se
 }
 
-# --- 3. Process panels -------------------------------------------------------
-
+# 3. Process panels 
 NPQ_FILES <- list(Neuro220 = NPQ_FILE)
 
 se_list <- list()
@@ -383,8 +372,7 @@ summary_df <- data.frame(
   n_lowdetect_kept = sapply(se_list, function(s) sum(rowData(s)$low_detect_flag, na.rm = TRUE))
   )
 
-# --- 4. Save a short summary -------------------------------------------------
-
+# 4. Save summary
 write.csv(summary_df, file.path(RESULTS_01_DIR, paste0(COHORT, "_load_summary.csv")),
           row.names = FALSE)
 print(summary_df)

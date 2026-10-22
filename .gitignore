@@ -14,5 +14,7 @@ data/
 # carrier and figure scripts - not part of the public pipeline
 05_lrrk2_carrier.R
 07_slide_figures_ntuh.R
-08_lrrk2_carrier_stratified.R
 bridging_sample_check.R
+carrier_lrrk2.R
+carrier_lrrk2_stratified.R
+carrier_quicktest.R

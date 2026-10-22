@@ -1,16 +1,12 @@
-# =============================================================================
 # Script 02 (v2): Merge GP2 Master Key (R12) with NULISA Data
-# Date: July 2026
+# Date: October 2026
 # Description: Loads SE objects from Script 01, joins the GP2 master key
 #              using cohort donor ID, adds clinical metadata (diagnosis,
 #              age, sex, ancestry) to colData, harmonizes phenotype to
 #              PD/Control, and saves updated SE objects.
-# =============================================================================
 
 
-
-# --- 0. Setup ----------------------------------------------------------------
-
+# 0. Setup
 library(SummarizedExperiment)
 library(tidyverse)
 library(readxl)
@@ -20,7 +16,7 @@ source("~/proteomics_nulisa/scripts/nulisa_pipeline_v2/quick_pass/00_config_v2.R
 dir.create(RESULTS_02_DIR, showWarnings = FALSE, recursive = TRUE)
 
 
-# --- 1. Load master key ------------------------------------------------------
+# 1. Load master key 
 master_key <- read.csv(file.path(DATA_DIR, MASTER_KEY_FILE), stringsAsFactors = FALSE)
 
 # Filter to study only
@@ -54,10 +50,8 @@ if (nrow(duplicated_ids) > 0) {
 }
 
 
-# --- 2. Helper function: merge metadata into SE -----------------------------
+# 2. Merge metadata into SE
 merge_metadata <- function(se_path, panel_name) {
- 
-  cat("\n=====", panel_name, "=====\n")
 
   # load SE object from Script 01
   se <- readRDS(se_path)
@@ -95,7 +89,6 @@ merge_metadata <- function(se_path, panel_name) {
     cat("Metadata source:\n"); print(table(merged_meta$metadata_source))
   }
 
-  # v2: neither join may change the number of rows
   stopifnot(nrow(merged_meta) == ncol(se))
 
   # Report match success
@@ -116,9 +109,7 @@ merge_metadata <- function(se_path, panel_name) {
   }
 
 
-  # --- Harmonize phenotype and sex labels --------------------------------
-  # GP2 master key has inconsistent labels. Create clean variables for
-  # downstream analysis; original columns are preserved.
+  #  Harmonize phenotype and sex labels 
   merged_meta <- merged_meta %>%
     mutate(
       sex_clean = case_when(
@@ -143,13 +134,16 @@ merge_metadata <- function(se_path, panel_name) {
     )
   )
 
-  # Matched or manifest-sourced, but GP2_phenotype was not PD or Control
+  # exclude prodromal
+  prodromal <- !is.na(merged_meta$diagnosis) & merged_meta$diagnosis %in% EXCLUDE_DIAGNOSES
+  merged_meta$phenotype_clean[prodromal] <- NA
+
+  # matched or manifest-sourced but GP2_phenotype was not PD or Control
   excluded <- merged_meta %>% filter(is.na(phenotype_clean))
   cat("Excluded (no clean PD/Control phenotype):", nrow(excluded), "\n")
   if (nrow(excluded) > 0) {
     print(excluded %>% dplyr::count(across(any_of(c("metadata_source", "GP2_phenotype", "diagnosis"))), sort = TRUE))
   }
-
 
   cat("\nHarmonized phenotype distribution:\n")
   print(table(merged_meta$phenotype_clean, useNA = "always"))
@@ -164,14 +158,7 @@ merge_metadata <- function(se_path, panel_name) {
   rownames(merged_meta) <- merged_meta$SampleName
   colData(se) <- DataFrame(merged_meta)
 
-  # Script 01 put the per-target QC into rowData. Confirm it survived, so
-  # Script 03 can join the flags from the SE instead of re-reading a CSV.
-  stopifnot(all(c("detectability", "low_detect_flag", "zero_prop") %in%
-                  colnames(rowData(se))))
-
-
-
-  # save updated SE
+# save updated SE
 out_path <- file.path(RESULTS_02_DIR,
                         paste0("se_", COHORT, "_", panel_name, "_with_metadata.rds"))
 saveRDS(se, out_path)
@@ -216,19 +203,15 @@ saveRDS(se, out_path)
 }
 
 
-# --- 3. Merge metadata for each panel ----------------------------------------
+# 3. Merge metadata for each panel 
 SE_IN <- list(Neuro220 = SE_FILTERED)
-
 summaries <- list()
 for (p in PANELS) summaries[[p]] <- merge_metadata(SE_IN[[p]], p)
 
 
-
-# --- 4. Save merge summary ---------------------------------------------------
+# 4. Save merge summary
 summary_df <- bind_rows(summaries)
-
 write.csv(summary_df,
           file.path(RESULTS_02_DIR, paste0(COHORT, "_merge_summary.csv")),
           row.names = FALSE)
-
 print(summary_df)

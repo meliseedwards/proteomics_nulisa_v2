@@ -1,12 +1,11 @@
-# =============================================================================
 # Script 03 (v2): Differential Abundance (DA) - PD vs Control
 # Description: DA for the cohort and panels set in 00_config_v2.R.
 #              Annotates hits with target QC, vendor flags, and SC drift.
-# =============================================================================
 
 
 
-# --- 0. Setup ----------------------------------------------------------------
+
+#  0. Setup 
 
 library(SummarizedExperiment)
 library(tidyverse)
@@ -17,15 +16,8 @@ source("~/proteomics_nulisa/scripts/nulisa_pipeline_v2/quick_pass/00_config_v2.R
 
 dir.create(RESULTS_03_DIR, showWarnings = FALSE, recursive = TRUE)
 
-stopifnot(PLATE_CORRECTION %in% c("none", "covariate", "sva"))
-
 if (!file.exists(SC_DRIFT_FILE))
-  stop("SC drift file not found - run 02b_SC_drift.R first:\n  ", SC_DRIFT_FILE)
-
-cat("DA settings | covariates:", paste(DA_COVARIATES, collapse = " + "),
-    "| plate:", PLATE_CORRECTION,
-    "| FDR:", FDR_THRESHOLD,
-    "| remove outliers:", REMOVE_OUTLIERS, "\n\n")
+  stop("SC drift file not found - run 02b first:\n  ", SC_DRIFT_FILE)
 
 # load META6 GWAS genes
 meta6_genes  <- read.csv(META6_FILE, stringsAsFactors = FALSE)
@@ -33,7 +25,7 @@ meta6_unique <- unique(meta6_genes$Meta6_Genes)
 
 
 
-# --- 1. Build the analysis cohort -------------------------------------------
+#  1. Build the analysis cohort 
 
 build_cohort <- function(se) {
   meta <- as.data.frame(colData(se))
@@ -77,8 +69,7 @@ build_cohort <- function(se) {
   colData(se)$sex_clean <- factor(colData(se)$sex_clean)
   colData(se)$PlateID   <- droplevels(factor(colData(se)$PlateID))
 
-  # targets the vendor says must not go through routine DA (APOE4 is a binary
-  # carrier readout). They stay in the SE and in QC, just not in the model.
+  # APOE4 is a binary carrier readout so it is not modelled
   if (length(EXCLUDE_FROM_DA) > 0) {
     drop <- rownames(se) %in% EXCLUDE_FROM_DA
     if (any(drop)) {
@@ -92,7 +83,8 @@ build_cohort <- function(se) {
 
 
 
-# --- 2. Fit lm for a given SE, return the topTable ------------------------
+#  2. Fit the linear model per target
+
 fit_da <- function(se) {
   meta <- as.data.frame(colData(se))
   expr <- assay(se, "npq")
@@ -135,15 +127,16 @@ fit_da <- function(se) {
 
 
 
-# --- 3. Genomic inflation  -------------------------------------------------------
-# lambda compares the median test statistic to a chi-square null.
+#  3. Genomic inflation  
+
 lambda_from_p <- function(p) {
   p <- p[!is.na(p) & p > 0]
   median(qchisq(1 - p, 1)) / qchisq(0.5, 1)
 }
 
 
-# --- 4. PCA outlier detection (v1 function, unchanged except output dir) ------
+#  4. PCA outlier detection
+
 detect_outliers_pca <- function(expr_mat, meta_df, panel_name,
                                 sd_threshold = OUTLIER_SD_THRESHOLD) {
   pca <- prcomp(t(expr_mat), scale. = TRUE, center = TRUE)
@@ -166,7 +159,7 @@ detect_outliers_pca <- function(expr_mat, meta_df, panel_name,
        xlab = paste0("PC1 (", round(var_explained[1], 1), "%)"),
        ylab = paste0("PC2 (", round(var_explained[2], 1), "%)"),
        main = paste0("PCA Outlier Detection - ", panel_name),
-       sub = paste0("Outliers (black) = >", sd_threshold, " SD from centroid (PCs 1-5)"))
+       sub = paste0("Outliers (black) = >", sd_threshold, " SD beyond the mean distance from centroid (PCs 1-5)"))
   legend("topright", legend = c("PD", "Control", "Outlier"),
          col = c("steelblue", "tomato", "black"), pch = 16)
   dev.off()
@@ -188,7 +181,8 @@ detect_outliers_pca <- function(expr_mat, meta_df, panel_name,
 
 
 
-# --- 5. Differential abundance for one panel --------------------------------
+# 5. Differential abundance for one panel 
+
 run_differential_abundance <- function(se_path, panel_name) {
   cat("=====", panel_name, "=====\n")
   se_all <- readRDS(se_path)
@@ -199,11 +193,7 @@ run_differential_abundance <- function(se_path, panel_name) {
       ", Control:", sum(meta$phenotype_clean == "Control"), ") |",
       nrow(se), "targets\n")
   stopifnot(!any(duplicated(meta$DONOR_ID)))
-  # Diagnostic only - shows why PDTRTMNT is not in the model.
-  if ("PDTRTMNT" %in% colnames(meta)) {
-    cat("Treatment x phenotype (NOT modelled):\n")
-    print(table(meta$PDTRTMNT, meta$phenotype_clean, useNA = "ifany"))
-  }
+  
   # Plate balance. If plates are single-phenotype, plate-as-covariate removes
   # real signal rather than batch.
   plate_tab <- table(meta$PlateID, meta$phenotype_clean)
@@ -221,12 +211,12 @@ run_differential_abundance <- function(se_path, panel_name) {
     se <- se[, !colnames(se) %in% outliers]
 
 
-  # --- main model ------------------------------------------------------------
+  #  main model
   results <- fit_da(se)
   lam <- lambda_from_p(results$P.Value)
   cat(sprintf("lambda = %.3f (reported only; not used to adjust p-values)\n", lam))
   
-  # --- sensitivity: drop SampleQC-warned samples -----------------------------
+  #  sensitivity: drop SampleQC-warned samples 
   warned <- colnames(se)[colData(se)$sample_qc_flag %in% TRUE]
   sens_qc <- NULL
   if (length(warned) > 0 && length(warned) < ncol(se) - 20) {
@@ -235,8 +225,7 @@ run_differential_abundance <- function(se_path, panel_name) {
     cat("Sensitivity: re-fit without", length(warned), "SampleQC-warned samples\n")
   }
 
-
-  # --- sensitivity: drop PCA outliers ---------------------------------------
+  #  sensitivity: drop PCA outliers 
   sens_out <- NULL
   if (!REMOVE_OUTLIERS && length(outliers) > 0) {
     sens_out <- fit_da(se[, !colnames(se) %in% outliers]) %>%
@@ -244,7 +233,7 @@ run_differential_abundance <- function(se_path, panel_name) {
     cat("Sensitivity: re-fit without", length(outliers), "PCA outliers\n")
   }
 
- # --- track non-zero data by phenotype ---------------------------------------
+ # track non-zero data by phenotype 
    expr  <- assay(se, "npq")
   is_pd <- colData(se)$phenotype_clean == "PD"
   nonzero <- tibble(
@@ -255,8 +244,7 @@ run_differential_abundance <- function(se_path, panel_name) {
   results <- results %>% left_join(nonzero, by = "Target")
 
 
-  # --- assemble --------------------------------------------------------------
-  # Target QC comes from rowData, filled in by Script 01
+  #  assemble 
   target_qc <- as.data.frame(rowData(se)) %>%
     select(Target, category, detectability, zero_prop, low_detect_flag)
   
@@ -274,7 +262,7 @@ run_differential_abundance <- function(se_path, panel_name) {
   if (!is.null(sens_qc))  results <- results %>% left_join(sens_qc,  by = "Target")
   if (!is.null(sens_out)) results <- results %>% left_join(sens_out, by = "Target")
 
-  # Vendor flags from the Alamar Neuro220 data sheet.
+  # vendor flags come from Alamar Neuro220 data sheet
   results <- results %>%
     mutate(
       vendor_high_cv      = Target %in% VENDOR_HIGH_CV_PLASMA[[panel_name]],
@@ -284,9 +272,7 @@ run_differential_abundance <- function(se_path, panel_name) {
       hemolysis_sensitive = Target %in% names(VENDOR_HEMOLYSIS_SENSITIVE[[panel_name]])
     )
 
-  # Report if a target measured above LOD in fewer than REPORT_MIN_DETECT of
-  # samples is still modelled and written, but flagged not reportable. The nine
-  # high-abundance targets have no LOD (special normalisation) and are reportable.
+  # Below 50% detectability: still modelled, but flagged not reportable
   results <- results %>%
     mutate(reportable = category == "high_abundance" |
                         (!is.na(detectability) & detectability >= REPORT_MIN_DETECT))
@@ -300,7 +286,7 @@ run_differential_abundance <- function(se_path, panel_name) {
 
   cat("Targets with no SC CV (below LOD in pooled plasma):",
       sum(is.na(results$sc_inter_cv)), "\n")
-  cat("Significant hits over Alamar's 15% SC CV threshold:", 
+  cat("Significant hits over Alamar's 15% SC CV benchmark:", 
       sum(results$adj.P.Val < FDR_THRESHOLD & results$sc_inter_cv > 15, 
       na.rm = TRUE), "\n")
   
@@ -341,7 +327,8 @@ run_differential_abundance <- function(se_path, panel_name) {
 
 
 
-# --- 6. Volcano plot ---------------------------------------------------------
+# 6. Volcano plot 
+
 make_volcano_plot <- function(results, panel_name) {
   results <- results %>%
     mutate(direction_nominal = case_when(
@@ -355,8 +342,7 @@ make_volcano_plot <- function(results, panel_name) {
   to_label <- results %>% filter(Target %in% top_targets | (in_meta6 & P.Value < 0.05))
   p <- ggplot(results, aes(logFC, -log10(P.Value), color = direction_nominal)) +
     geom_point(alpha = 0.6, size = 2.5) +
-    # v2: hollow circles mark low-detectability targets, so a hit that rests on
-    # a poorly detected protein is visible in the figure itself.
+    # gray rings = <50% detectable
     geom_point(data = filter(results, low_detect_flag),
                shape = 1, size = 4, colour = "grey30", stroke = 0.6) +
     geom_point(data = filter(results, in_meta6),
@@ -386,7 +372,7 @@ make_volcano_plot <- function(results, panel_name) {
 
 
 
-# --- 7. Run all panels -------------------------------------------------------
+# 7. Run all panels 
 
 SE_PATHS <- list(Neuro220 = SE_MERGED)
 results <- list()
@@ -396,7 +382,8 @@ for (p in PANELS) {
 }
 
 
-# --- 8. Summary --------------------------------------------------------------
+# 8. Summary 
+
 build_summary <- function(results, panel_name) {
   data.frame(
     panel           = panel_name,
@@ -434,10 +421,3 @@ write.csv(summary_df,
           row.names = FALSE)
 
 print(summary_df)
-
-
-results$Neuro220 %>%
-  dplyr::filter(adj.P.Val < FDR_THRESHOLD) %>%
-  dplyr::select(Target, logFC, adj.P.Val, category, detectability,
-         sc_inter_cv, sc_max_drift, vendor_high_cv, vendor_low_detect, cross_reactive) %>%
-  dplyr::arrange(desc(sc_inter_cv))
