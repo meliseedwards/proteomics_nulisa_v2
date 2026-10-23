@@ -1,4 +1,4 @@
-# Script 02 (v2): Merge GP2 Master Key (R12) with NULISA Data
+# Script 02a (v2): Merge GP2 Master Key (R12) with NULISA Data
 # Date: October 2026
 # Description: Loads SE objects from Script 01, joins the GP2 master key
 #              using cohort donor ID, adds clinical metadata (diagnosis,
@@ -105,14 +105,6 @@ merge_metadata <- function(se_path, panel_name) {
   cat("Samples matched to GP2:", matched, "/", nrow(merged_meta),
       "(", match_pct, "%)\n", sep = "")
   cat("Unmatched samples:", unmatched, "\n")
-  cat("\nDiagnosis distribution (matched samples):\n")
-  print(table(merged_meta$diagnosis, useNA = "always"))
-  cat("\nGP2_PHENO distribution:\n")
-  print(table(merged_meta$GP2_PHENO, useNA = "always"))
-  if (sum(!is.na(merged_meta$age)) > 0) {
-    cat("\nAge distribution:\n")
-    print(summary(merged_meta$age))
-  }
 
 
   #  Harmonize phenotype and sex labels 
@@ -151,15 +143,7 @@ merge_metadata <- function(se_path, panel_name) {
     print(excluded %>% dplyr::count(across(any_of(c("metadata_source", "GP2_phenotype", "diagnosis"))), sort = TRUE))
   }
 
-  cat("\nHarmonized phenotype distribution:\n")
-  print(table(merged_meta$phenotype_clean, useNA = "always"))
-
-  cat("\nAncestry (unified: NBA then WGS) distribution:\n")
-  print(table(merged_meta$ancestry, useNA = "always"))
-  cat("\nAncestry source (NBA vs WGS):\n")
-  print(table(merged_meta$ancestry_source, useNA = "always"))
-
-  # Critical: merged_meta MUST be in same order as colnames(se)
+  # Check sample order before updating colData.
   stopifnot(identical(as.character(merged_meta$SampleName), colnames(se)))
   rownames(merged_meta) <- merged_meta$SampleName
   colData(se) <- DataFrame(merged_meta)
