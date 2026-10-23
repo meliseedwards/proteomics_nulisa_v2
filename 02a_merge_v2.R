@@ -67,7 +67,7 @@ merge_metadata <- function(se_path, panel_name) {
   # Manifest fallback: some donors are not yet in R12, but the manifest carries
   # the same phenotype/age/sex fields. R12 wins where both exist.
   if (!is.null(MANIFEST_FILES)) {
-      man <- bind_rows(lapply(seq_along(MANIFEST_FILES), function(i) {
+    man <- bind_rows(lapply(seq_along(MANIFEST_FILES), function(i) {
       m   <- read.csv(file.path(MANIFEST_DIR, MANIFEST_FILES[i]), stringsAsFactors = FALSE)
       col <- if (length(MANIFEST_SAMPLE_COL) > 1) MANIFEST_SAMPLE_COL[i] else MANIFEST_SAMPLE_COL
       m %>% transmute(SampleName    = trimws(gsub("'", "", as.character(.data[[col]]))),
@@ -75,7 +75,13 @@ merge_metadata <- function(se_path, panel_name) {
                       man_age       = age,
                       man_sex       = biological_sex_for_qc)
     })) %>%
-      distinct(SampleName, .keep_all = TRUE)
+      distinct()                                     
+
+    conflicts <- man %>% dplyr::count(SampleName) %>% filter(n > 1)
+    if (nrow(conflicts) > 0) {
+      print(man %>% filter(SampleName %in% conflicts$SampleName) %>% arrange(SampleName))
+      stop(nrow(conflicts), " SampleName(s) have conflicting phenotype/age/sex in the manifests")
+    }
 
     merged_meta <- merged_meta %>%
       left_join(man, by = "SampleName") %>%

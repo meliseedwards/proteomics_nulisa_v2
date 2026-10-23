@@ -328,7 +328,6 @@ run_differential_abundance <- function(se_path, panel_name) {
 
 
 # 6. Volcano plot 
-
 make_volcano_plot <- function(results, panel_name) {
   results <- results %>%
     mutate(direction_nominal = case_when(
@@ -371,9 +370,7 @@ make_volcano_plot <- function(results, panel_name) {
 }
 
 
-
 # 7. Run all panels 
-
 SE_PATHS <- list(Neuro220 = SE_MERGED)
 results <- list()
 for (p in PANELS) {
@@ -383,7 +380,6 @@ for (p in PANELS) {
 
 
 # 8. Summary 
-
 build_summary <- function(results, panel_name) {
   data.frame(
     panel           = panel_name,
@@ -417,7 +413,7 @@ build_summary <- function(results, panel_name) {
 summary_df <- bind_rows(lapply(PANELS, function(p) build_summary(results[[p]], p)))
 
 write.csv(summary_df,
-          file.path(RESULTS_03_DIR, "differential_abundance_summary.csv"),
-          row.names = FALSE)
+  file.path(RESULTS_03_DIR, "differential_abundance_summary.csv"),
+    row.names = FALSE)
 
 print(summary_df)

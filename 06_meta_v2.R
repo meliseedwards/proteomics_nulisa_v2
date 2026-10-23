@@ -18,7 +18,6 @@ dir.create(META_DIR, showWarnings = FALSE, recursive = TRUE)
 cat("META | input:", META_INPUT, "| cohorts:", paste(META_COHORTS, collapse = ", "), "\n")
 
 
-
 # 1. Load the combined DA table 
 da_all <- read.csv(file.path(PROJECT_DIR, paste0("DA_all_cohorts_combined_", META_INPUT, ".csv")),
                    stringsAsFactors = FALSE)

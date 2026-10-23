@@ -16,7 +16,7 @@ PROJECT_DIR <- "/mnt/output/proteomics/results/nulisa_v2"
 
 # --- Cohort to analyze --------------------------------------------------------
 # change cohort and plate correction, source 00, then run scripts. 
-COHORT <- "p_ppmi_v10"  
+COHORT <- "p118"  
 PLATE_CORRECTION <- "covariate" # none, covariate, sva
 
 # "default" = the NA/zero thresholds below; "none" = no NA or zero filtering.
@@ -311,7 +311,6 @@ VARIANT_REPORT_FILE <- "variant_report_r12_final_aug3.csv"
 META6_FILE <- file.path(DATA_DIR, "meta6_genes.csv")
 
 
-
 # --- Pipeline output files (downstream scripts reference these) -------------
 
 # The merged SE for whichever cohort is active. Scripts 04, 06, 08 read this.
@@ -373,7 +372,6 @@ EXCLUDE_DIAGNOSES <- c("Prodromal", "Prodromal motor PD", "Prodromal non-motor P
                        "Unaffected with hyposmia")
 
 
-
 # --- Special target categories (per NULISAseqR user guide) -------------------
 EXEMPT_RARE_CASE <- TRUE
 
@@ -429,6 +427,17 @@ VENDOR_HEMOLYSIS_SENSITIVE <- list(
   Neuro220 = c("CCL5" = 2, "FLT1" = 2, "IL18" = 2, "S100A12" = 2, "IL16" = 10)
 )
 
+# Fix jumbled Aβ target names in the PPMI export
+fix_target_names <- function(x) {
+  replacements <- c(
+   "AÎ²38" = "Aβ38",
+   "AÎ²40" = "Aβ40",
+    "AÎ²42" = "Aβ42"
+    )
+  hit <- x %in% names(replacements)
+  x[hit] <- unname(replacements[x[hit]])
+  x
+}
 
 # guards
 stopifnot(

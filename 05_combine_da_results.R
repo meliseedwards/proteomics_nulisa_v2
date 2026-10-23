@@ -59,7 +59,7 @@ for (rule in names(plate_rule)) {
   if (nrow(combined) == 0) next
 
   cat("\n", rule, "\n")
-  print(count(combined, cohort_label, name = "n_targets"))
+  print(dplyr::count(combined, cohort_label, name = "n_targets"))
   write.csv(combined, file.path(BASE, paste0("DA_all_cohorts_combined_", rule, ".csv")),
             row.names = FALSE)
 }

@@ -181,15 +181,8 @@ run_qc_panel <- function(se_path, npq_file, panel_name, da_file) {
       mutate(across(any_of(c("NPQ", "targetLOD_NPQ")), as.numeric))
   }))
 
-   # Fix jumbled Aβ target names
-  fix_mojibake <- function(v) {
-    y <- iconv(v, from = "UTF-8", to = "latin1")
-    ok <- !is.na(y)
-    v[ok] <- y[ok]
-    Encoding(v) <- "UTF-8"
-    v
-  }
-  npq_long$Target <- fix_mojibake(npq_long$Target)
+  # Fix jumbled Aβ target names
+  npq_long$Target <- fix_target_names(npq_long$Target)
 
   # same aliases as Script 01
   if ("SampleMatrixType" %in% names(npq_long))

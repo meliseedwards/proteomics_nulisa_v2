@@ -15,17 +15,6 @@ source("~/proteomics_nulisa/scripts/nulisa_pipeline_v2/quick_pass/00_config_v2.R
 dir.create(RESULTS_01_DIR, showWarnings = FALSE, recursive = TRUE)
 
 
-
-# Fix encoded target names (Abeta) 
-# the file contains "AI^2 38" instead of "Abeta38" (UTF-8). fix for plots.
-fix_mojibake <- function(v) {
-  y <- iconv(v, from = "UTF-8", to = "latin1")
-  ok <- !is.na(y)
-  v[ok] <- y[ok]
-  Encoding(v) <- "UTF-8"
-  v
-}
-
 # 1. Process one panel
 process_panel <- function(npq_file, panel_name) {
   npq_path <- file.path(NPQ_DIR, npq_file)
@@ -41,13 +30,12 @@ process_panel <- function(npq_file, panel_name) {
   read_excel(p, sheet = 1, skip = NPQ_SKIP, na = "NA", col_types = "text")))
   cat("Raw rows in the data:", nrow(npq_long), "\n")
 
-  # Repair double-encoded target names (abeta)
+  # Repair garbled Aβ target names (PPMI export)
   before <- unique(npq_long$Target)
-  npq_long$Target <- fix_mojibake(npq_long$Target)
+  npq_long$Target <- fix_target_names(npq_long$Target)
   changed <- setdiff(unique(npq_long$Target), before)
   if (length(changed) > 0)
-    cat("Repaired", length(changed), "double-encoded target name(s):",
-        paste(changed, collapse = ", "), "\n")
+    cat("fixed", length(changed), "target name(s):", paste(changed, collapse = ", "), "\n")
 
  # Sites name the same columns differently so rename to one standard set
   if ("SampleMatrixType" %in% names(npq_long))
@@ -86,7 +74,14 @@ process_panel <- function(npq_file, panel_name) {
                       DONOR_ID   = trimws(as.character(.data[[MANIFEST_GP2ID_COL]])))
     })) %>%
       filter(SampleName != "", DONOR_ID != "") %>%
-      distinct(SampleName, .keep_all = TRUE)
+      distinct()
+
+    conflicts <- lookup %>% dplyr::count(SampleName) %>% filter(n > 1)
+     if (nrow(conflicts) > 0) {
+      print(lookup %>% filter(SampleName %in% conflicts$SampleName) %>% arrange(SampleName))
+      stop(nrow(conflicts), " sampleName(s) map to more than one donor ID in the manifests")
+     }
+
 
     n_before <- n_distinct(npq_long$SampleName)
     npq_long <- npq_long %>%

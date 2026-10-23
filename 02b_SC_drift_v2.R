@@ -18,22 +18,13 @@ dir.create(SC_DRIFT_DIR, showWarnings = FALSE, recursive = TRUE)
 
 
 # 1. Load SC wells
-
 npq <- bind_rows(lapply(file.path(NPQ_DIR, NPQ_FILE), function(f) {
   read_excel(f, sheet = 1, skip = NPQ_SKIP, na = "NA") %>%
     mutate(across(any_of(c("NPQ", "targetLOD_NPQ", "LOD")), as.numeric))
 })) %>%
   dplyr::rename(any_of(c(LOD = "targetLOD_NPQ")))
 
-# Fix affected Aβ target names
-fix_mojibake <- function(v) {
-  y <- iconv(v, from = "UTF-8", to = "latin1")
-  ok <- !is.na(y)
-  v[ok] <- y[ok]
-  Encoding(v) <- "UTF-8"
-  v
-}
-npq$Target <- fix_mojibake(npq$Target)
+npq$Target <- fix_target_names(npq$Target)
 
 sc <- npq %>%
   dplyr::filter(SampleType == "SC") %>%
@@ -52,7 +43,6 @@ ok <- sc %>% dplyr::filter(is.na(LOD) | NPQ > LOD)
 
 
 # 2. Per-plate median and intra-plate CV
-
 # For each target on each plate, take the median of the 3 SC replicates
 # then measure how far each plate sits from the median across all plates.
 per_plate <- ok %>%
@@ -76,7 +66,6 @@ intra_summary <- per_plate %>%
 
 
 # 3. Inter-plate CV across all SC wells 
-
 inter <- ok %>%
   group_by(Target) %>%
   summarise(n_sc_total = dplyr::n(),
@@ -91,7 +80,6 @@ drift_max <- per_plate %>%
 
 
 # 4. Assemble 
-
 sc_drift <- per_plate %>%
   pivot_wider(names_from  = plate,
               values_from = c(n_sc_above_lod, npq_median, npq_sd,
@@ -102,8 +90,7 @@ sc_drift <- per_plate %>%
   arrange(desc(max_abs_drift))
 
 
-# 5. Report in terminal 
-
+# 5. Report in the terminal 
 cat("\nMedian intra-plate SC CV by plate (Alamar target: <10%):\n")
 print(per_plate %>%
         group_by(plate) %>%
@@ -129,7 +116,6 @@ cat("Targets with at least one plate over Alamar's 10% intra-plate CV:",
 
 
 #  6. Save 
-
 # Long format is easier to join onto DA results; wide is easier to eyeball.
 write.csv(per_plate,
           file.path(SC_DRIFT_DIR, paste0("sc_drift_long_", COHORT, ".csv")),
@@ -143,7 +129,6 @@ cat("\nWrote sc_drift_", COHORT, ".csv and sc_drift_long_", COHORT, ".csv\n", se
 
 
 #  7. Plate labels 
-
 # p1/p2/p3 are display labels built here from sorted PlateID. Print the
 # mapping so the columns can be traced back.
 cat("\nPlate label mapping:\n")
