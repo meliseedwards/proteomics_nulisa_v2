@@ -42,7 +42,7 @@ NPQ ~ phenotype + age + sex (+ plate)
 
 Fitted per target with `limma::lmFit` without empirical Bayes moderation, so ordinary standard errors are available for meta-analysis. Benjamini–Hochberg FDR < 0.05.
 
-**Plate:** included as a covariate where both cases and controls are represented across plates. Left out where the within-plate comparison would rest on a small subset of cases. Every cohort is also run without plate (`plate_none`). This rule is ours, not a vendor recommendation.
+**Plate:** included as a covariate where both cases and controls are represented across plates. Left out where the within-plate comparison would rest on a small subset of cases. Every cohort is also run without plate (`plate_none`). 
 
 Two sensitivity refits accompany each result: one without samples carrying an assay QC warning, one without PCA outliers (> 4 SD from the centroid of PCs 1–5).
 
@@ -58,7 +58,6 @@ Two sensitivity refits accompany each result: one without samples carrying an as
 
 - **Detectability:** share of samples above the target's limit of detection. Targets below 50% (Alamar's threshold) are marked not `reportable`; high-abundance targets, which have no LOD, are exempt.
 - **CV:** intra- and inter-plate, from sample control wells, on unlogged NPQ.
-- **Plate ICC** with an F-test and Tukey pairwise comparisons.
 - **Zero imbalance:** difference in exact-zero rate between cases and controls.
 - **Vendor flags** (Alamar Neuro220 data sheet): cross-reactivity, low vendor detectability, high vendor CV. Hemolysis-sensitive targets are flagged from Alamar's Inflammation 250 validation data (assumed to carry over to Neuro220; not vendor-confirmed).
 
